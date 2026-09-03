@@ -18,6 +18,7 @@ import {
  * Only public-facing campaign/product information
  * is returned to the Buyer Agent.
  */
+
 export async function requestOffersFromRevenueAgent({
   userId,
   message,
@@ -43,6 +44,7 @@ export async function requestOffersFromRevenueAgent({
    *
    * The browser never supplies merchantId.
    */
+
   const campaigns =
     await prisma.campaign.findMany({
       where: {
@@ -77,12 +79,15 @@ export async function requestOffersFromRevenueAgent({
         userId,
 
       responses: [],
+
+      offers: [],
     };
   }
 
   /*
    * Group campaigns by merchant.
    */
+
   const merchantIds = [
     ...new Set(
       campaigns
@@ -100,6 +105,7 @@ export async function requestOffersFromRevenueAgent({
    * Ask each relevant merchant-side
    * Revenue Agent to evaluate the request.
    */
+
   for (
     const merchantId of merchantIds
   ) {
@@ -125,6 +131,7 @@ export async function requestOffersFromRevenueAgent({
      * Give the Revenue Agent only the
      * campaign information it needs.
      */
+
     const campaignContext =
       merchantCampaigns.map(
         (campaign) => ({
@@ -143,17 +150,16 @@ export async function requestOffersFromRevenueAgent({
           discountPercent:
             campaign.discountPercent,
 
-          merchant: campaign.merchant
-            ? {
-                id:
-                  campaign
-                    .merchant.id,
+          merchant:
+            campaign.merchant
+              ? {
+                  id:
+                    campaign.merchant.id,
 
-                name:
-                  campaign
-                    .merchant.name,
-              }
-            : null,
+                  name:
+                    campaign.merchant.name,
+                }
+              : null,
 
           products:
             campaign.targets
@@ -161,44 +167,60 @@ export async function requestOffersFromRevenueAgent({
                 (target) =>
                   target.role ===
                     "TARGET" &&
-                  target.product
-                    .active &&
-                  target.product
-                    .inventory > 0
+                  target.product &&
+                  target.product.active &&
+                  target.product.inventory >
+                    0
               )
+
               .map(
                 (target) => ({
                   id:
-                    target.product
-                      .id,
+                    target.product.id,
 
                   name:
-                    target.product
-                      .name,
+                    target.product.name,
 
                   description:
-                    target.product
-                      .description,
+                    target.product.description,
 
                   category:
-                    target.product
-                      .category,
+                    target.product.category,
 
                   price:
-                    target.product
-                      .price,
+                    target.product.price,
 
                   currency:
-                    target.product
-                      .currency,
+                    target.product.currency,
 
                   inventory:
-                    target.product
-                      .inventory,
+                    target.product.inventory,
                 })
               ),
         })
       );
+
+    /*
+     * Remove campaigns with no available
+     * target products.
+     */
+
+    const usableCampaigns =
+      campaignContext.filter(
+        (campaign) =>
+          campaign.products?.length > 0
+      );
+
+    if (
+      !usableCampaigns.length
+    ) {
+      continue;
+    }
+
+    /*
+     * Ask Revenue Agent to identify relevant
+     * campaigns.
+     */
 
     const result =
       await revenueAgent.invoke({
@@ -218,20 +240,21 @@ ${message.trim()}
 Active campaigns belonging to this merchant:
 
 ${JSON.stringify(
-  campaignContext,
+  usableCampaigns,
   null,
   2
 )}
 
 Your task:
 
-1. Determine whether any campaign is relevant
-   to the buyer request.
+1. Determine whether any supplied campaign is
+   relevant to the buyer request.
 
-2. If relevant, recommend the best campaign.
+2. If relevant, recommend only the relevant
+   campaign(s).
 
-3. Only use campaigns and products supplied
-   above.
+3. Use ONLY the campaign and product information
+   supplied above.
 
 4. Never invent products, IDs, prices,
    discounts, inventory or campaign IDs.
@@ -242,27 +265,27 @@ Your task:
 
 7. Return a concise customer-facing explanation.
 
-If there is no relevant campaign, return exactly:
+IMPORTANT:
+
+If there is no relevant campaign, respond exactly:
 
 NO_RELEVANT_OFFER
 
-If there is a relevant campaign, return:
+If there is a relevant campaign, respond exactly
+using this structure for each relevant offer:
 
-RELEVANT_CAMPAIGN_ID: <exact campaignId>
+RELEVANT_OFFERS
 
-Then give a concise customer-facing explanation
-containing:
+campaignId: <exact campaign ID>
+campaignName: <exact campaign name>
+merchantName: <exact merchant name>
+productId: <exact product ID>
+productName: <exact product name>
+price: <exact product price>
+discountPercent: <exact discount percentage>
+description: <short customer-facing explanation>
 
-- campaign name
-- merchant name
-- target product
-- price
-- relevant explanation
-
-Only use a campaignId supplied in the campaign
-context.
-
-Never invent a campaignId.
+Only use information supplied above.
 `,
           },
         ],
@@ -281,56 +304,90 @@ Never invent a campaignId.
       "string"
         ? lastMessage.content
         : "";
-    
-    const campaignIdMatch =
-  revenueMessage.match(
-    /RELEVANT_CAMPAIGN_ID:\s*([^\s]+)/i
-  );
-
-const relevantCampaignId =
-  campaignIdMatch?.[1] || null;    
 
     /*
-     * Determine whether the Revenue Agent
-     * found an actual relevant offer.
+     * If Revenue Agent says there is no
+     * relevant offer, skip this merchant.
      */
-    const hasRelevantOffer =
-  !revenueMessage
-    .toLowerCase()
-    .includes("no_relevant_offer");
 
-const structuredOffers =
-  hasRelevantOffer && relevantCampaignId
-    ? campaignContext
+    if (
+      revenueMessage
+        .toLowerCase()
+        .includes(
+          "no_relevant_offer"
+        )
+    ) {
+      continue;
+    }
+
+    /*
+     * Extract campaign IDs mentioned by
+     * Revenue Agent.
+     *
+     * We validate every ID against the
+     * actual database-backed context.
+     */
+
+    const relevantCampaignIds = [
+      ...revenueMessage.matchAll(
+        /campaignId:\s*([^\s]+)/gi
+      ),
+    ].map(
+      (match) =>
+        match[1].trim()
+    );
+
+    /*
+     * If the agent didn't return campaign IDs,
+     * do not trust it enough to expose offers.
+     */
+
+    if (
+      !relevantCampaignIds.length
+    ) {
+      continue;
+    }
+
+    /*
+     * Validate campaign IDs against the
+     * campaigns actually supplied to the
+     * Revenue Agent.
+     */
+
+    const structuredOffers =
+      usableCampaigns
+
         .filter(
           (campaign) =>
-            campaign.campaignId ===
-              relevantCampaignId &&
-            campaign.products?.length > 0
+            relevantCampaignIds.includes(
+              campaign.campaignId
+            )
         )
-        .map((campaign) => ({
-          campaignId:
-            campaign.campaignId,
 
-          campaignName:
-            campaign.campaignName,
+        .map(
+          (campaign) => ({
+            campaignId:
+              campaign.campaignId,
 
-          type:
-            campaign.type,
+            campaignName:
+              campaign.campaignName,
 
-          description:
-            campaign.description,
+            type:
+              campaign.type,
 
-          discountPercent:
-            campaign.discountPercent,
+            description:
+              campaign.description,
 
-          merchant:
-            campaign.merchant,
+            discountPercent:
+              campaign.discountPercent,
 
-          products:
-            campaign.products,
-        }))
-    : [];
+            merchant:
+              campaign.merchant,
+
+            products:
+              campaign.products,
+          })
+        );
 
     if (
       structuredOffers.length
@@ -347,6 +404,22 @@ const structuredOffers =
     }
   }
 
+  /*
+   * IMPORTANT:
+   *
+   * Flatten all merchant responses into
+   * one top-level offers array.
+   *
+   * This is what the Buyer API/frontend
+   * will consume for OfferCard rendering.
+   */
+
+  const offers =
+    responses.flatMap(
+      (response) =>
+        response.offers || []
+    );
+
   return {
     success: true,
 
@@ -357,5 +430,7 @@ const structuredOffers =
       userId,
 
     responses,
+
+    offers,
   };
 }

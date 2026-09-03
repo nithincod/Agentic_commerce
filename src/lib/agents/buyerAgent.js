@@ -42,20 +42,18 @@ import {
   requireBuyer,
 } from "@/lib/auth/authorization";
 
-
 /* ==================================================
    STATE
-   ================================================== */
+================================================== */
 
 const BuyerState =
   new StateSchema({
     messages: MessagesValue,
   });
 
-
 /* ==================================================
    CREATE BUYER GRAPH
-   ================================================== */
+================================================== */
 
 export function createBuyerGraph(userId) {
   if (!userId) {
@@ -64,10 +62,9 @@ export function createBuyerGraph(userId) {
     );
   }
 
-
   /* ------------------------------------------------
      USER-SCOPED TOOLS
-     ------------------------------------------------ */
+  ------------------------------------------------ */
 
   const cartTool =
     createCartTool(userId);
@@ -78,16 +75,9 @@ export function createBuyerGraph(userId) {
   const offerTools =
     createOfferTools(userId);
 
-
   /* ------------------------------------------------
      A2A OFFER TOOL
-     ------------------------------------------------
-
-     IMPORTANT:
-     This MUST be a LangChain tool().
-     Do NOT use a plain object with
-     name / description / invoke.
-     ------------------------------------------------ */
+  ------------------------------------------------ */
 
   const requestMerchantOffer = tool(
     async ({ message }) => {
@@ -133,13 +123,20 @@ Ask merchant Revenue Agents for relevant
 offers based on the authenticated buyer's
 shopping request.
 
-Use this when the customer is looking for:
+Use this whenever the customer is looking for:
 - offers
 - deals
 - promotions
 - discounts
 - better alternatives
 - merchant campaigns
+- a better price
+- a better deal
+
+IMPORTANT:
+For product shopping requests where an offer
+could be relevant, use this tool to ask merchant
+Revenue Agents for available campaigns.
 
 Do not invent offers, campaign IDs,
 product IDs, prices, discounts, or inventory.
@@ -156,10 +153,9 @@ product IDs, prices, discounts, or inventory.
     }
   );
 
-
   /* ------------------------------------------------
      ONLY THESE TOOLS ARE EXPOSED TO THE LLM
-     ------------------------------------------------ */
+  ------------------------------------------------ */
 
   const tools = [
     searchProducts,
@@ -171,17 +167,9 @@ product IDs, prices, discounts, or inventory.
     requestMerchantOffer,
   ];
 
-
   /* ------------------------------------------------
      SAFETY CHECK
-     ------------------------------------------------
-
-     Every item passed to bindTools() must be an
-     actual LangChain tool.
-
-     This catches accidental plain objects before
-     they reach Gemini.
-     ------------------------------------------------ */
+  ------------------------------------------------ */
 
   for (const [index, currentTool] of
     tools.entries()) {
@@ -198,18 +186,16 @@ product IDs, prices, discounts, or inventory.
     }
   }
 
-
   /* ------------------------------------------------
      BIND TOOLS
-     ------------------------------------------------ */
+  ------------------------------------------------ */
 
   const modelWithTools =
     model.bindTools(tools);
 
-
   /* ==================================================
      MODEL NODE
-     ================================================== */
+  ================================================== */
 
   async function callModel(state) {
     const response =
@@ -224,7 +210,6 @@ Your job is to help the authenticated
 customer with shopping.
 
 You can:
-
 - discover products
 - compare products
 - understand offers
@@ -232,7 +217,6 @@ You can:
 - add products to the customer's cart
 - create checkout when the customer explicitly
   wants to purchase
-
 
 ==================================================
 IDENTITY RULES
@@ -252,7 +236,6 @@ resources.
 
 The application controls customer identity.
 
-
 ==================================================
 PRODUCT RULES
 ==================================================
@@ -260,7 +243,6 @@ PRODUCT RULES
 Always use product tools for product information.
 
 Never invent:
-
 - product names
 - product IDs
 - prices
@@ -272,7 +254,6 @@ respect it.
 
 Verify inventory before adding a product
 to the cart.
-
 
 ==================================================
 CART RULES
@@ -290,40 +271,45 @@ Never invent a cartId.
 
 Never modify another customer's cart.
 
-
 ==================================================
 OFFER RULES
 ==================================================
 
 When the customer asks about:
-
 - offers
 - discounts
 - promotions
 - deals
 - campaigns
+- better prices
+- better deals
 
 use:
-
 get_available_offers
+
+and/or:
+request_merchant_offer
 
 when appropriate.
 
-You may also use:
+For a shopping request such as:
 
-request_merchant_offer
+"Show me gaming keyboards under ₹5000"
 
-when a merchant-specific or personalized
-offer should be requested.
+you should:
+1. Search for matching products.
+2. Request relevant merchant offers.
+3. Return the matching products and actual
+   offers received from merchants.
+
+Do NOT assume that an offer exists.
 
 Never invent:
-
 - campaign IDs
 - discounts
 - offer names
 - prices
 - merchant names
-
 
 ==================================================
 A2A OFFER RULES
@@ -333,49 +319,40 @@ request_merchant_offer communicates with
 merchant Revenue Agents.
 
 Use it when the customer is asking for:
-
-- offers
-- discounts
-- promotions
-- deals
 - a better deal
+- merchant offers
 - personalized offers
+- promotions
 - campaign-based recommendations
+- discounts
 
-IMPORTANT:
+The Revenue Agent is the source of truth
+for merchant campaign information.
 
-When the customer asks for products with a
-specific category, keyword, budget, or shopping
-requirement, first search for the matching
-products.
+Never invent the response from a Revenue Agent.
 
-Then request merchant offers for that shopping
-request using request_merchant_offer.
+Only present information actually returned
+by the A2A request.
 
-Example:
+==================================================
+SHOPPING + OFFERS
+==================================================
 
-"Show me gaming keyboards under ₹5000"
+If the user asks for products with a budget,
+for example:
 
-1. Search products for gaming keyboards.
-2. Respect the ₹5000 maximum price.
-3. Request relevant merchant offers through
-   request_merchant_offer.
-4. Present the matching products and actual
-   merchant offers returned by the Revenue Agents.
+"gaming keyboards under ₹5000"
 
-Do NOT assume that a product search means there
-are no offers.
+do not only search products.
 
-The A2A offer request should be attempted when
-the shopping request could benefit from a
-merchant campaign.
+Also request merchant offers so that
+eligible campaign offers can be displayed.
 
-Never invent offers, campaign IDs, discounts,
-prices, merchants, or products.
+If offers are returned, mention them naturally
+in the response.
 
-Only present information actually returned by
-the Revenue Agent.
-
+The frontend receives structured offers separately,
+so do not fabricate structured offer data.
 
 ==================================================
 CHECKOUT RULES
@@ -399,7 +376,6 @@ create_checkout.
 Never create checkout for a cart the customer
 does not own.
 
-
 ==================================================
 PAYMENT RULES
 ==================================================
@@ -414,7 +390,6 @@ Do not perform refunds.
 
 Payment authorization is handled by the
 dedicated payment workflow.
-
 
 ==================================================
 IMPORTANT SHOPPING BEHAVIOR
@@ -456,7 +431,6 @@ context is unambiguous.
 "Can you get me a better deal?"
 => request merchant offer.
 
-
 ==================================================
 SOURCE OF TRUTH
 ==================================================
@@ -480,17 +454,15 @@ financial actions.
     };
   }
 
-
   /* ==================================================
      TOOL EXECUTION
-     ================================================== */
+  ================================================== */
 
   async function executeTools(state) {
     const lastMessage =
       state.messages[
         state.messages.length - 1
       ];
-
 
     if (
       !AIMessage.isInstance(lastMessage)
@@ -500,9 +472,7 @@ financial actions.
       };
     }
 
-
     const toolResults = [];
-
 
     for (const toolCall of
       lastMessage.tool_calls ?? []) {
@@ -514,20 +484,11 @@ financial actions.
             toolCall.name
         );
 
-
       if (!selectedTool) {
         throw new Error(
           `Unknown tool: ${toolCall.name}`
         );
       }
-
-
-      /* --------------------------------------------
-         IMPORTANT
-
-         LangChain tool.invoke() expects the tool
-         arguments, NOT the complete toolCall.
-         -------------------------------------------- */
 
       let result;
 
@@ -550,12 +511,6 @@ financial actions.
         });
       }
 
-
-      /* --------------------------------------------
-         Convert result into ToolMessage so the
-         model can continue the conversation.
-         -------------------------------------------- */
-
       toolResults.push(
         new ToolMessage({
           content:
@@ -569,23 +524,20 @@ financial actions.
       );
     }
 
-
     return {
       messages: toolResults,
     };
   }
 
-
   /* ==================================================
      SHOULD CONTINUE
-     ================================================== */
+  ================================================== */
 
   function shouldContinue(state) {
     const lastMessage =
       state.messages[
         state.messages.length - 1
       ];
-
 
     if (
       AIMessage.isInstance(lastMessage) &&
@@ -594,14 +546,12 @@ financial actions.
       return "tools";
     }
 
-
     return END;
   }
 
-
   /* ==================================================
      BUILD GRAPH
-     ================================================== */
+  ================================================== */
 
   return new StateGraph(BuyerState)
 
@@ -637,10 +587,9 @@ financial actions.
     .compile();
 }
 
-
 /* ==================================================
    RUN BUYER AGENT
-   ================================================== */
+================================================== */
 
 export async function runBuyerAgent(message) {
   if (
@@ -653,32 +602,26 @@ export async function runBuyerAgent(message) {
     );
   }
 
-
   /* ----------------------------------------------
      Authentication happens on the server.
-
-     The browser does NOT provide userId.
-     ---------------------------------------------- */
+  ---------------------------------------------- */
 
   const session =
     await requireBuyer();
 
-
   const userId =
     session.user.id;
 
-
   /* ----------------------------------------------
      Create graph scoped to authenticated buyer.
-     ---------------------------------------------- */
+  ---------------------------------------------- */
 
   const buyerGraph =
     createBuyerGraph(userId);
 
-
   /* ----------------------------------------------
      Execute graph.
-     ---------------------------------------------- */
+  ---------------------------------------------- */
 
   const result =
     await buyerGraph.invoke({
@@ -689,7 +632,6 @@ export async function runBuyerAgent(message) {
         },
       ],
     });
-
 
   return result;
 }

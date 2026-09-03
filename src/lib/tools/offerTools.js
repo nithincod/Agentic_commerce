@@ -3,7 +3,9 @@ import { z } from "zod";
 
 import prisma from "@/lib/db/prisma";
 
-export function createOfferTools(userId) {
+export function createOfferTools(
+  userId
+) {
   if (!userId) {
     throw new Error(
       "userId is required"
@@ -15,27 +17,25 @@ export function createOfferTools(userId) {
       async () => {
         try {
           const campaigns =
-            await prisma.campaign.findMany(
-              {
-                where: {
-                  status: "ACTIVE",
-                },
+            await prisma.campaign.findMany({
+              where: {
+                status: "ACTIVE",
+              },
 
-                include: {
-                  merchant: true,
+              include: {
+                merchant: true,
 
-                  targets: {
-                    include: {
-                      product: true,
-                    },
+                targets: {
+                  include: {
+                    product: true,
                   },
                 },
+              },
 
-                orderBy: {
-                  createdAt: "desc",
-                },
-              }
-            );
+              orderBy: {
+                createdAt: "desc",
+              },
+            });
 
           const offers = [];
 
@@ -44,15 +44,17 @@ export function createOfferTools(userId) {
           ) {
             const products =
               campaign.targets
+
                 .filter(
                   (target) =>
                     target.role ===
                       "TARGET" &&
                     target.product &&
                     target.product.active &&
-                    target.product
-                      .inventory > 0
+                    target.product.inventory >
+                      0
                 )
+
                 .map(
                   (target) => ({
                     id:
@@ -62,23 +64,19 @@ export function createOfferTools(userId) {
                       target.product.name,
 
                     description:
-                      target.product
-                        .description,
+                      target.product.description,
 
                     category:
-                      target.product
-                        .category,
+                      target.product.category,
 
                     price:
                       target.product.price,
 
                     currency:
-                      target.product
-                        .currency,
+                      target.product.currency,
 
                     inventory:
-                      target.product
-                        .inventory,
+                      target.product.inventory,
 
                     active:
                       target.product.active,
@@ -111,14 +109,10 @@ export function createOfferTools(userId) {
                 campaign.merchant
                   ? {
                       id:
-                        campaign
-                          .merchant
-                          .id,
+                        campaign.merchant.id,
 
                       name:
-                        campaign
-                          .merchant
-                          .name,
+                        campaign.merchant.name,
                     }
                   : null,
 
@@ -158,7 +152,14 @@ export function createOfferTools(userId) {
           "get_available_offers",
 
         description:
-          "Find currently active merchant offers available to the authenticated buyer.",
+          `
+Find currently active merchant offers
+available to the authenticated buyer.
+
+Use this when the buyer explicitly asks
+to see offers, deals, discounts, promotions,
+or campaigns.
+`,
 
         schema:
           z.object({}),

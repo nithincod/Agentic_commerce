@@ -1,94 +1,125 @@
 import { NextResponse } from "next/server";
 
-import { requireBuyer } from "@/lib/auth/authorization";
-import { runBuyerAgent } from "@/lib/agents/buyerAgent";
+import {
+  requireBuyer,
+} from "@/lib/auth/authorization";
 
-export async function POST(request) {
+import {
+  runBuyerAgent,
+} from "@/lib/agents/buyerAgent";
+
+export async function POST(
+  request
+) {
   try {
-    // -----------------------------------------
-    // 1. AUTHENTICATION
-    // -----------------------------------------
+    /* -----------------------------------------
+       1. AUTHENTICATION
+    ----------------------------------------- */
 
-    const session = await requireBuyer();
+    const session =
+      await requireBuyer();
 
-    // -----------------------------------------
-    // 2. READ REQUEST
-    // -----------------------------------------
+    /* -----------------------------------------
+       2. READ REQUEST
+    ----------------------------------------- */
 
-    const body = await request.json();
-    const message = body?.message?.trim();
+    const body =
+      await request.json();
+
+    const message =
+      body?.message?.trim();
 
     if (!message) {
       return NextResponse.json(
         {
           success: false,
-          error: "message is required",
+          error:
+            "message is required",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // -----------------------------------------
-    // 3. RUN BUYER AGENT
-    // -----------------------------------------
+    /* -----------------------------------------
+       3. RUN BUYER AGENT
+    ----------------------------------------- */
 
-    const result = await runBuyerAgent(
-      message,
-      session.user.id
-    );
+    const result =
+      await runBuyerAgent(
+        message
+      );
 
-    const messages = result?.messages || [];
+    const messages =
+      result?.messages || [];
 
-    
-
-    // -----------------------------------------
-    // 4. FIND FINAL AI RESPONSE
-    // -----------------------------------------
+    /* -----------------------------------------
+       4. FIND FINAL AI RESPONSE
+    ----------------------------------------- */
 
     let responseText = "";
 
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const current = messages[i];
+    for (
+      let i = messages.length - 1;
+      i >= 0;
+      i--
+    ) {
+      const current =
+        messages[i];
 
       const type =
         current?._getType?.() ??
         current?.type;
 
       if (
-        (type === "ai" ||
-          current?.role === "assistant") &&
-        typeof current?.content === "string" &&
+        (
+          type === "ai" ||
+          current?.role === "assistant"
+        ) &&
+        typeof current?.content ===
+          "string" &&
         current.content.trim()
       ) {
-        responseText = current.content;
+        responseText =
+          current.content;
+
         break;
       }
     }
 
-    // Fallback
+    /* -----------------------------------------
+       FALLBACK RESPONSE
+    ----------------------------------------- */
+
     if (!responseText) {
       const lastMessage =
-        messages[messages.length - 1];
+        messages[
+          messages.length - 1
+        ];
 
       if (
-        typeof lastMessage?.content === "string"
+        typeof lastMessage?.content ===
+        "string"
       ) {
-        responseText = lastMessage.content;
+        responseText =
+          lastMessage.content;
       }
     }
 
-    // -----------------------------------------
-    // 5. EXTRACT PRODUCTS FROM TOOL RESULTS
-    // -----------------------------------------
+    /* -----------------------------------------
+       5. EXTRACT PRODUCTS
+    ----------------------------------------- */
 
     const products = [];
 
-    for (const current of messages) {
+    for (
+      const current of messages
+    ) {
       const type =
         current?._getType?.() ??
         current?.type;
 
-      // Only inspect tool messages
       if (
         type !== "tool" &&
         current?.role !== "tool"
@@ -100,230 +131,326 @@ export async function POST(request) {
 
       try {
         if (
-          typeof current?.content === "string"
+          typeof current?.content ===
+          "string"
         ) {
-          parsed = JSON.parse(
-            current.content
-          );
+          parsed =
+            JSON.parse(
+              current.content
+            );
         } else {
-          parsed = current?.content;
+          parsed =
+            current?.content;
         }
       } catch {
         continue;
       }
 
-      // -----------------------------------------
-      // search_products response
-      // -----------------------------------------
+      /* -----------------------------------------
+         search_products response
+      ----------------------------------------- */
 
       if (
         parsed?.success === true &&
-        Array.isArray(parsed?.products)
+        Array.isArray(
+          parsed?.products
+        )
       ) {
-        for (const product of parsed.products) {
+        for (
+          const product of
+            parsed.products
+        ) {
           if (
             product?.id &&
             product?.name &&
-            typeof product?.price === "number"
+            typeof product?.price ===
+              "number"
           ) {
             if (
               !products.some(
                 (existing) =>
-                  existing.id === product.id
+                  existing.id ===
+                  product.id
               )
             ) {
               products.push({
-                id: product.id,
-                name: product.name,
+                id:
+                  product.id,
+
+                name:
+                  product.name,
+
                 description:
-                  product.description ?? "",
+                  product.description ??
+                  "",
+
                 category:
-                  product.category ?? "",
-                price: product.price,
+                  product.category ??
+                  "",
+
+                price:
+                  product.price,
+
                 currency:
-                  product.currency ?? "INR",
+                  product.currency ??
+                  "INR",
+
                 inventory:
                   product.inventory,
+
                 active:
-                  product.active ?? true,
+                  product.active ??
+                  true,
               });
             }
           }
         }
       }
 
-      // -----------------------------------------
-      // get_product response
-      // -----------------------------------------
+      /* -----------------------------------------
+         get_product response
+      ----------------------------------------- */
 
       if (
         parsed?.success === true &&
         parsed?.product?.id
       ) {
-        const product = parsed.product;
+        const product =
+          parsed.product;
 
         if (
           !products.some(
             (existing) =>
-              existing.id === product.id
+              existing.id ===
+              product.id
           )
         ) {
           products.push({
-            id: product.id,
-            name: product.name,
+            id:
+              product.id,
+
+            name:
+              product.name,
+
             description:
-              product.description ?? "",
+              product.description ??
+              "",
+
             category:
-              product.category ?? "",
-            price: product.price,
+              product.category ??
+              "",
+
+            price:
+              product.price,
+
             currency:
-              product.currency ?? "INR",
+              product.currency ??
+              "INR",
+
             inventory:
               product.inventory,
+
             active:
-              product.active ?? true,
+              product.active ??
+              true,
           });
         }
       }
     }
 
-    // -----------------------------------------
-    // 6. EXTRACT OFFERS
-    // -----------------------------------------
+    /* -----------------------------------------
+       6. EXTRACT OFFERS
+    ----------------------------------------- */
 
-    // -----------------------------------------
-// 6. EXTRACT OFFERS
-// -----------------------------------------
+    const offers = [];
 
-const offers = [];
-
-for (const current of messages) {
-  const type =
-    current?._getType?.() ??
-    current?.type;
-
-  if (
-    type !== "tool" &&
-    current?.role !== "tool"
-  ) {
-    continue;
-  }
-
-  let parsed;
-
-  try {
-    if (
-      typeof current?.content === "string"
+    for (
+      const current of messages
     ) {
-      parsed = JSON.parse(
-        current.content
-      );
-    } else {
-      parsed = current?.content;
-    }
-  } catch {
-    continue;
-  }
+      const type =
+        current?._getType?.() ??
+        current?.type;
 
-  // -----------------------------------------
-  // Direct offer response
-  // -----------------------------------------
-
-  if (
-    parsed?.success === true &&
-    Array.isArray(parsed?.offers)
-  ) {
-    for (const offer of parsed.offers) {
       if (
-        offer?.campaignId &&
-        !offers.some(
-          (existing) =>
-            existing.campaignId ===
-            offer.campaignId
-        )
-      ) {
-        offers.push(offer);
-      }
-    }
-  }
-
-  // -----------------------------------------
-  // A2A OFFER_RESPONSE
-  // -----------------------------------------
-
-  if (
-    parsed?.success === true &&
-    parsed?.type === "OFFER_RESPONSE" &&
-    Array.isArray(parsed?.responses)
-  ) {
-    for (const response of parsed.responses) {
-      if (
-        !Array.isArray(response?.offers)
+        type !== "tool" &&
+        current?.role !== "tool"
       ) {
         continue;
       }
 
-      for (const offer of response.offers) {
+      let parsed;
+
+      try {
         if (
-          offer?.campaignId &&
-          !offers.some(
-            (existing) =>
-              existing.campaignId ===
-              offer.campaignId
-          )
+          typeof current?.content ===
+          "string"
         ) {
-          offers.push(offer);
+          parsed =
+            JSON.parse(
+              current.content
+            );
+        } else {
+          parsed =
+            current?.content;
+        }
+      } catch {
+        continue;
+      }
+
+      /* -----------------------------------------
+         DIRECT OFFERS
+
+         Example:
+         {
+           success: true,
+           offers: [...]
+         }
+      ----------------------------------------- */
+
+      if (
+        parsed?.success === true &&
+        Array.isArray(
+          parsed?.offers
+        )
+      ) {
+        for (
+          const offer of
+            parsed.offers
+        ) {
+          if (
+            offer?.campaignId &&
+            !offers.some(
+              (existing) =>
+                existing.campaignId ===
+                offer.campaignId
+            )
+          ) {
+            offers.push(
+              offer
+            );
+          }
+        }
+      }
+
+      /* -----------------------------------------
+         A2A RESPONSES
+
+         Example:
+         {
+           success: true,
+           responses: [
+             {
+               offers: [...]
+             }
+           ]
+         }
+      ----------------------------------------- */
+
+      if (
+        parsed?.success === true &&
+        Array.isArray(
+          parsed?.responses
+        )
+      ) {
+        for (
+          const response of
+            parsed.responses
+        ) {
+          if (
+            !Array.isArray(
+              response?.offers
+            )
+          ) {
+            continue;
+          }
+
+          for (
+            const offer of
+              response.offers
+          ) {
+            if (
+              !offer?.campaignId
+            ) {
+              continue;
+            }
+
+            if (
+              !offers.some(
+                (existing) =>
+                  existing.campaignId ===
+                  offer.campaignId
+              )
+            ) {
+              offers.push(
+                offer
+              );
+            }
+          }
         }
       }
     }
-  }
-}
 
-    // -----------------------------------------
-    // 7. SERIALIZE MESSAGES
-    // -----------------------------------------
+    /* -----------------------------------------
+       7. SERIALIZE MESSAGES
+    ----------------------------------------- */
 
     const serializedMessages =
-      messages.map((current) => ({
-        type:
-          current?._getType?.() ??
-          current?.type,
+      messages.map(
+        (current) => ({
+          type:
+            current?._getType?.() ??
+            current?.type,
 
-        role:
-          current?.role ?? null,
+          role:
+            current?.role ??
+            null,
 
-        content:
-          current?.content ?? "",
+          content:
+            current?.content ??
+            "",
 
-        toolCalls:
-          current?.tool_calls ?? [],
-      }));
+          toolCalls:
+            current?.tool_calls ??
+            [],
+        })
+      );
 
-    // -----------------------------------------
-    // 8. RETURN RESPONSE
-    // -----------------------------------------
+    /* -----------------------------------------
+       8. RETURN RESPONSE
+    ----------------------------------------- */
 
     return NextResponse.json({
       success: true,
 
       user: {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
+        id:
+          session.user.id,
+
+        name:
+          session.user.name,
+
+        email:
+          session.user.email,
       },
 
-      // Human-readable AI response
-      response: responseText,
+      response:
+        responseText,
 
-      // IMPORTANT:
-      // BuyerPage uses this for ProductCard
+      /*
+       * Product cards
+       */
       products,
 
-      // Offers for future UI
+      /*
+       * Offer cards
+       */
       offers,
 
-      // Full serialized agent messages
-      messages: serializedMessages,
+      /*
+       * Full agent messages
+       */
+      messages:
+        serializedMessages,
     });
   } catch (error) {
     console.error(
@@ -341,7 +468,9 @@ for (const current of messages) {
           error:
             "Authentication required",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
@@ -355,18 +484,23 @@ for (const current of messages) {
           error:
             "Buyer access required",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
 
     return NextResponse.json(
       {
         success: false,
+
         error:
           error?.message ||
           "Buyer agent failed",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
