@@ -191,54 +191,93 @@ export async function POST(request) {
     // 6. EXTRACT OFFERS
     // -----------------------------------------
 
-    const offers = [];
+    // -----------------------------------------
+// 6. EXTRACT OFFERS
+// -----------------------------------------
 
-    for (const current of messages) {
-      const type =
-        current?._getType?.() ??
-        current?.type;
+const offers = [];
 
+for (const current of messages) {
+  const type =
+    current?._getType?.() ??
+    current?.type;
+
+  if (
+    type !== "tool" &&
+    current?.role !== "tool"
+  ) {
+    continue;
+  }
+
+  let parsed;
+
+  try {
+    if (
+      typeof current?.content === "string"
+    ) {
+      parsed = JSON.parse(
+        current.content
+      );
+    } else {
+      parsed = current?.content;
+    }
+  } catch {
+    continue;
+  }
+
+  // -----------------------------------------
+  // Direct offer response
+  // -----------------------------------------
+
+  if (
+    parsed?.success === true &&
+    Array.isArray(parsed?.offers)
+  ) {
+    for (const offer of parsed.offers) {
       if (
-        type !== "tool" &&
-        current?.role !== "tool"
+        offer?.campaignId &&
+        !offers.some(
+          (existing) =>
+            existing.campaignId ===
+            offer.campaignId
+        )
+      ) {
+        offers.push(offer);
+      }
+    }
+  }
+
+  // -----------------------------------------
+  // A2A OFFER_RESPONSE
+  // -----------------------------------------
+
+  if (
+    parsed?.success === true &&
+    parsed?.type === "OFFER_RESPONSE" &&
+    Array.isArray(parsed?.responses)
+  ) {
+    for (const response of parsed.responses) {
+      if (
+        !Array.isArray(response?.offers)
       ) {
         continue;
       }
 
-      let parsed;
-
-      try {
+      for (const offer of response.offers) {
         if (
-          typeof current?.content === "string"
+          offer?.campaignId &&
+          !offers.some(
+            (existing) =>
+              existing.campaignId ===
+              offer.campaignId
+          )
         ) {
-          parsed = JSON.parse(
-            current.content
-          );
-        } else {
-          parsed = current?.content;
-        }
-      } catch {
-        continue;
-      }
-
-      if (
-        parsed?.success === true &&
-        Array.isArray(parsed?.offers)
-      ) {
-        for (const offer of parsed.offers) {
-          if (
-            offer?.campaignId &&
-            !offers.some(
-              (existing) =>
-                existing.campaignId ===
-                offer.campaignId
-            )
-          ) {
-            offers.push(offer);
-          }
+          offers.push(offer);
         }
       }
     }
+  }
+}
 
     // -----------------------------------------
     // 7. SERIALIZE MESSAGES

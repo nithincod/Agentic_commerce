@@ -242,16 +242,27 @@ Your task:
 
 7. Return a concise customer-facing explanation.
 
-IMPORTANT:
-If there is no relevant campaign, say:
+If there is no relevant campaign, return exactly:
+
 NO_RELEVANT_OFFER
 
-If there is a relevant campaign, mention:
+If there is a relevant campaign, return:
+
+RELEVANT_CAMPAIGN_ID: <exact campaignId>
+
+Then give a concise customer-facing explanation
+containing:
+
 - campaign name
 - merchant name
 - target product
 - price
 - relevant explanation
+
+Only use a campaignId supplied in the campaign
+context.
+
+Never invent a campaignId.
 `,
           },
         ],
@@ -270,58 +281,56 @@ If there is a relevant campaign, mention:
       "string"
         ? lastMessage.content
         : "";
+    
+    const campaignIdMatch =
+  revenueMessage.match(
+    /RELEVANT_CAMPAIGN_ID:\s*([^\s]+)/i
+  );
+
+const relevantCampaignId =
+  campaignIdMatch?.[1] || null;    
 
     /*
      * Determine whether the Revenue Agent
      * found an actual relevant offer.
      */
     const hasRelevantOffer =
-      revenueMessage
-        .toLowerCase()
-        .includes(
-          "no_relevant_offer"
-        ) === false;
+  !revenueMessage
+    .toLowerCase()
+    .includes("no_relevant_offer");
 
-    /*
-     * We still validate against the actual
-     * database campaigns.
-     *
-     * We don't trust the AI to create
-     * structured product information.
-     */
-    const structuredOffers =
-      hasRelevantOffer
-        ? campaignContext
-            .filter(
-              (campaign) =>
-                campaign.products
-                  ?.length > 0
-            )
-            .map(
-              (campaign) => ({
-                campaignId:
-                  campaign.campaignId,
+const structuredOffers =
+  hasRelevantOffer && relevantCampaignId
+    ? campaignContext
+        .filter(
+          (campaign) =>
+            campaign.campaignId ===
+              relevantCampaignId &&
+            campaign.products?.length > 0
+        )
+        .map((campaign) => ({
+          campaignId:
+            campaign.campaignId,
 
-                campaignName:
-                  campaign.campaignName,
+          campaignName:
+            campaign.campaignName,
 
-                type:
-                  campaign.type,
+          type:
+            campaign.type,
 
-                description:
-                  campaign.description,
+          description:
+            campaign.description,
 
-                discountPercent:
-                  campaign.discountPercent,
+          discountPercent:
+            campaign.discountPercent,
 
-                merchant:
-                  campaign.merchant,
+          merchant:
+            campaign.merchant,
 
-                products:
-                  campaign.products,
-              })
-            )
-        : [];
+          products:
+            campaign.products,
+        }))
+    : [];
 
     if (
       structuredOffers.length
