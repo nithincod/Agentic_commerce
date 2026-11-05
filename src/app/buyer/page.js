@@ -3146,12 +3146,14 @@ import {
   AlertCircle,
   RefreshCw,
   Tag,
+  ShieldCheck,
 } from "lucide-react";
 
 const suggestions = [
   "Find me wireless headphones under ₹3000",
   "Show me gaming keyboards under ₹5000",
-  "Find a lightweight laptop under ₹60000",
+  "Proceed to checkout",
+  "Create checkout for my cart",
 ];
 
 /* ==================================================
@@ -3880,6 +3882,9 @@ export default function BuyerPage() {
 
           offers:
             extractedOffers,
+
+          checkout:
+            data?.checkout || null,
         },
       ]);
 
@@ -4055,6 +4060,52 @@ export default function BuyerPage() {
 
   async function addOfferToCart(product) {
     await addToCart(product);
+  }
+
+  /* ==================================================
+     DIRECT CHECKOUT (BUY NOW)
+     ================================================== */
+
+  async function buyNow(product) {
+    if (!product?.id) {
+      setError("This product cannot be checked out.");
+      return;
+    }
+
+    try {
+      setCartLoading(product.id);
+      setError("");
+
+      const response = await fetch("/api/cart/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          productId: product.id,
+          quantity: 1,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to prepare direct checkout");
+      }
+
+      const cartId = data?.cart?.id || data?.id;
+
+      if (cartId) {
+        window.location.href = `/checkout?cartId=${encodeURIComponent(cartId)}`;
+      } else {
+        window.location.href = "/cart";
+      }
+    } catch (err) {
+      console.error("Direct checkout error:", err);
+      setError(err?.message || "Direct checkout failed");
+    } finally {
+      setCartLoading("");
+    }
   }
 
   /* ==================================================
@@ -4255,12 +4306,45 @@ export default function BuyerPage() {
                                       onAddToCart={
                                         addToCart
                                       }
+                                      onBuyNow={
+                                        buyNow
+                                      }
                                     />
                                   )
                                 )}
                               </div>
                             </div>
                           )}
+
+                        {/* ==================================
+                           CHECKOUT CARD FOR THIS RESPONSE
+                        ================================== */}
+
+                        {!isUser && message.checkout && (
+                          <div className="mt-5 border-t border-slate-100 pt-5">
+                            <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5 shadow-sm">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <ShieldCheck size={20} className="text-violet-600" />
+                                  <h4 className="font-bold text-slate-900">Checkout Session Ready</h4>
+                                </div>
+                                <span className="rounded-full bg-violet-600 px-3 py-1 text-xs font-bold text-white">
+                                  ₹{Number(message.checkout.amount || 0).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-xs text-slate-600">
+                                {message.checkout.policy?.reason || "Autonomous checkout session generated with policy verification."}
+                              </p>
+                              <Link
+                                href={`/checkout?cartId=${encodeURIComponent(message.checkout.cartId)}`}
+                                className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-violet-700 transition"
+                              >
+                                Complete Checkout / Proceed to Payment
+                                <ArrowRight size={16} />
+                              </Link>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

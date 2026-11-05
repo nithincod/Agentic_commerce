@@ -277,23 +277,25 @@ export async function fulfillPaidCheckout({
     await prisma.$transaction(
       async (tx) => {
         /*
-         * Re-read inventory inside transaction.
+         * Re-read inventory inside transaction (batch fetch for speed).
          */
+        const productIds = checkout.cart.items.map((item) => item.productId);
+        const liveProducts = await tx.product.findMany({
+          where: {
+            id: { in: productIds },
+          },
+        });
+        const productMap = new Map(liveProducts.map((p) => [p.id, p]));
+
         for (
           const item of
             checkout.cart.items
         ) {
-          const product =
-            await tx.product.findUnique({
-              where: {
-                id:
-                  item.productId,
-              },
-            });
+          const product = productMap.get(item.productId);
 
           if (!product) {
             throw new Error(
-              `${item.product.name} no longer exists`
+              `${item.product?.name || "Product"} no longer exists`
             );
           }
 
@@ -487,6 +489,10 @@ export async function fulfillPaidCheckout({
         });
 
         return createdOrder;
+      },
+      {
+        maxWait: 10000,
+        timeout: 30000,
       }
     );
 

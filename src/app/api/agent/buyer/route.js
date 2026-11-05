@@ -391,6 +391,43 @@ export async function POST(
     }
 
     /* -----------------------------------------
+       6.5. EXTRACT CHECKOUT (from create_checkout)
+    ----------------------------------------- */
+
+    let checkout = null;
+
+    for (const current of messages) {
+      const type =
+        current?._getType?.() ??
+        current?.type;
+
+      if (
+        type !== "tool" &&
+        current?.role !== "tool"
+      ) {
+        continue;
+      }
+
+      let parsed;
+
+      try {
+        parsed =
+          typeof current?.content === "string"
+            ? JSON.parse(current.content)
+            : current?.content;
+      } catch {
+        continue;
+      }
+
+      if (
+        parsed?.success === true &&
+        parsed?.checkout?.id
+      ) {
+        checkout = parsed.checkout;
+      }
+    }
+
+    /* -----------------------------------------
        7. SERIALIZE MESSAGES
     ----------------------------------------- */
 
@@ -445,6 +482,11 @@ export async function POST(
        * Offer cards
        */
       offers,
+
+      /*
+       * Created checkout session (if create_checkout was executed)
+       */
+      checkout,
 
       /*
        * Full agent messages

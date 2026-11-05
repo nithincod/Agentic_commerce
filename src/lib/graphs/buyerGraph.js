@@ -276,10 +276,16 @@ Never modify another customer's cart.
 
 
 ==================================================
-OFFER RULES
+PRODUCT & PROACTIVE OFFER RULES
 ==================================================
 
-When the customer asks about:
+Whenever the customer searches for, asks about, or wants to buy ANY product or category (e.g. "Show me gaming mice", "Find keyboards", "Wireless headphones"):
+1. ALWAYS call search_products to find available products.
+2. ALWAYS proactively check active campaigns and discounts using get_available_offers (or request_merchant_offer) to see if any promotional discounts, bundles, or price cuts apply.
+3. Present BOTH the matching products AND any applicable active offers/discounts to the customer. If a product has a discount or campaign, highlight the deal!
+4. If no campaigns currently match, mention that no active promotional discounts apply.
+
+When the customer specifically asks about:
 
 - offers
 - discounts

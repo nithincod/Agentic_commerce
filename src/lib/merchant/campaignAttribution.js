@@ -361,6 +361,10 @@ export async function attributeOrderToCampaign({
                 order.createdAt,
             },
           });
+        },
+        {
+          maxWait: 10000,
+          timeout: 30000,
         }
       );
 

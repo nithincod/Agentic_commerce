@@ -36,42 +36,53 @@ export function createCheckoutTool(userId) {
   }
 
   return tool(
-    async ({ cartId }) => {
+    async ({ cartId } = {}) => {
       try {
-        if (!cartId) {
-          return JSON.stringify({
-            success: false,
-            checkoutCreated: false,
-            error: "cartId is required",
-          });
-        }
-
         /*
          * --------------------------------------------------
-         * 1. Fetch ONLY this authenticated buyer's cart.
+         * 1. Fetch this authenticated buyer's cart.
+         * If cartId is provided, look it up directly.
+         * If omitted, automatically resolve the active cart.
          * --------------------------------------------------
          */
-        const cart =
-          await prisma.cart.findFirst({
-            where: {
-              id: cartId,
-              userId,
-            },
+        const trimmedCartId = cartId?.trim();
 
-            include: {
-              items: {
-                include: {
-                  product: true,
+        const cart = trimmedCartId
+          ? await prisma.cart.findFirst({
+              where: {
+                id: trimmedCartId,
+                userId,
+              },
+              include: {
+                items: {
+                  include: {
+                    product: true,
+                  },
                 },
               },
-            },
-          });
+            })
+          : await prisma.cart.findFirst({
+              where: {
+                userId,
+                status: "ACTIVE",
+              },
+              include: {
+                items: {
+                  include: {
+                    product: true,
+                  },
+                },
+              },
+              orderBy: {
+                createdAt: "desc",
+              },
+            });
 
         if (!cart) {
           return JSON.stringify({
             success: false,
             checkoutCreated: false,
-            error: "Cart not found",
+            error: trimmedCartId ? "Cart not found" : "No active cart found for this account",
           });
         }
 
@@ -471,48 +482,41 @@ export function createCheckoutTool(userId) {
           /*
            * Existing checkout is stale because its amount
            * differs from the current authoritative cart.
+           *
+           * Supersede stale unfinished checkouts for this cart
+           * and proceed to create a fresh authoritative checkout.
            */
-          await recordAgentAction({
-            agentType:
-              "BUYER_AGENT",
-
-            action:
-              "CHECKOUT_BLOCKED",
-
-            entityType:
-              "Checkout",
-
-            entityId:
-              existingCheckout.id,
-
-            input: {
-              userId,
-
-              cartId:
-                cart.id,
-
-              existingAmount:
-                existingCheckout.amount,
-
-              currentAmount:
-                totalAmount,
+          await prisma.checkout.updateMany({
+            where: {
+              cartId: cart.id,
+              status: {
+                in: [
+                  "READY",
+                  "AWAITING_APPROVAL",
+                  "APPROVED",
+                  "PAYMENT_PENDING",
+                ],
+              },
             },
-
-            status:
-              "BLOCKED",
-
-            reason:
-              "Existing checkout amount no longer matches current cart",
+            data: {
+              status: "SUPERSEDED",
+            },
           });
 
-          return JSON.stringify({
-            success: false,
-
-            checkoutCreated:
-              false,
-
-            error:
-              "An existing checkout no longer matches the current cart amount",
+          await recordAgentAction({
+            agentType: "BUYER_AGENT",
+            action: "CHECKOUT_SUPERSEDED",
+            entityType: "Checkout",
+            entityId: existingCheckout.id,
+            input: {
+              userId,
+              cartId: cart.id,
+              existingAmount: existingCheckout.amount,
+              currentAmount: totalAmount,
+            },
+            status: "SUCCESS",
+            reason:
+              "Existing checkout amount no longer matches current cart; superseded with fresh checkout",
           });
         }
 
@@ -711,8 +715,9 @@ export function createCheckoutTool(userId) {
       schema: z.object({
         cartId: z
           .string()
+          .optional()
           .describe(
-            "The active cart ID returned by create_cart"
+            "Optional cart ID. If omitted, the buyer's current active cart is used automatically."
           ),
       }),
     }

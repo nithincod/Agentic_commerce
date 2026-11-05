@@ -153,12 +153,9 @@ export function createOfferTools(
 
         description:
           `
-Find currently active merchant offers
-available to the authenticated buyer.
+Find currently active merchant offers, promotions, campaigns, and discounts available to the authenticated buyer.
 
-Use this when the buyer explicitly asks
-to see offers, deals, discounts, promotions,
-or campaigns.
+Use this whenever the buyer searches for products, asks for items, or inquires about deals, discounts, promotions, or campaigns to check which active offers apply.
 `,
 
         schema:

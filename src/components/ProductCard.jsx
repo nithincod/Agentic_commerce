@@ -6,6 +6,7 @@ export default function ProductCard({
   product,
   recommended = false,
   onAddToCart,
+  onBuyNow,
   loading = false,
 }) {
   return (
@@ -48,19 +49,25 @@ export default function ProductCard({
           </div>
         </div>
 
-        <button
-          type="button"
-          disabled={loading || product.inventory <= 0}
-          onClick={() => onAddToCart?.(product)}
-          className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-            recommended
-              ? "bg-violet-600 text-white hover:bg-violet-700"
-              : "border border-violet-500 text-violet-600 hover:bg-violet-50"
-          }`}
-        >
-          {loading ? <Loader2 size={17} className="animate-spin" /> : <ShoppingCart size={17} />}
-          {loading ? "Adding..." : "Add to Cart"}
-        </button>
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            disabled={loading || product.inventory <= 0}
+            onClick={() => onAddToCart?.(product)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-violet-500 px-3 py-2.5 text-xs font-semibold text-violet-600 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
+            {loading ? "Adding..." : "Add to Cart"}
+          </button>
+          <button
+            type="button"
+            disabled={loading || product.inventory <= 0}
+            onClick={() => onBuyNow?.(product)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Buy Now
+          </button>
+        </div>
       </div>
     </div>
   );
